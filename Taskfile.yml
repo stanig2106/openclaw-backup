@@ -148,7 +148,7 @@ tasks:
   dashboard:
     desc: Afficher l'URL du dashboard avec le bon token
     cmds:
-      - '{{.EXEC}} dashboard --no-open'
+      - 'echo "http://127.0.0.1:{{.GATEWAY_PORT}}/#token=$(grep OPENCLAW_GATEWAY_TOKEN .env | cut -d= -f2)"'
 
   devices:
     desc: Lister les devices (paired et en attente)

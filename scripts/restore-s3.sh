@@ -143,6 +143,9 @@ if [[ "$OSTYPE" == "linux"* ]] && [ "$(id -u)" -eq 0 ]; then
 fi
 
 ok "Restauration complète terminée !"
-echo ""
-echo "  Redémarre le gateway: task start"
+
+# Démarrer le gateway
+info "Démarrage du gateway..."
+docker compose up -d openclaw-gateway
+ok "Gateway démarré !"
 echo ""
