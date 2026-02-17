@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Données persistantes (ne pas versionner)
+data/
+backups/
+logs/
+
+# Code source OpenClaw (cloné par setup.sh)
+openclaw/
+
+# Docker
+docker-compose.extra.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

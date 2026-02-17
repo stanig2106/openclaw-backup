@@ -1,0 +1,229 @@
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  DATA_DIR: '{{.OPENCLAW_DATA_DIR | default "./data/config"}}'
+  WORKSPACE_DIR: '{{.OPENCLAW_WORKSPACE_DIR | default "./data/workspace"}}'
+  GATEWAY_PORT: '{{.OPENCLAW_GATEWAY_PORT | default "18789"}}'
+  CONTAINER_NAME: openclaw-docker-openclaw-gateway-1
+  # exec dans le gateway (pour les commandes qui parlent au gateway)
+  EXEC: docker compose exec openclaw-gateway node dist/index.js
+
+tasks:
+  # --- Installation ---
+  setup:
+    desc: Installation complète (clone, build, onboarding, démarrage)
+    cmds:
+      - bash scripts/setup.sh
+
+  # --- Gestion du service ---
+  # stop/start préservent le filesystem du conteneur (apt install, /opt, etc.)
+  # restart: unless-stopped fait pareil au reboot du VPS
+  start:
+    desc: Démarrer le gateway (préserve les modifs système)
+    cmds:
+      - |
+        if docker ps -a --format '{{`{{.Names}}`}}' | grep -q "^{{.CONTAINER_NAME}}$"; then
+          docker start {{.CONTAINER_NAME}}
+        else
+          docker compose up -d openclaw-gateway
+        fi
+      - 'echo ""'
+      - 'echo "Gateway démarré sur http://127.0.0.1:{{.GATEWAY_PORT}}/"'
+
+  stop:
+    desc: Arrêter le gateway (préserve les modifs système)
+    cmds:
+      - docker compose stop openclaw-gateway
+
+  restart:
+    desc: Redémarrer le gateway (préserve les modifs système)
+    cmds:
+      - docker compose restart openclaw-gateway
+
+  recreate:
+    desc: Recréer le conteneur depuis l'image (perd les modifs système non commitées)
+    prompt: "Les modifs système non commitées seront perdues. Fais 'task commit' d'abord si besoin. Continuer ?"
+    cmds:
+      - docker compose up -d --force-recreate openclaw-gateway
+
+  # --- Monitoring ---
+  logs:
+    desc: Afficher les logs en temps réel
+    cmds:
+      - docker compose logs -f openclaw-gateway
+
+  status:
+    desc: Vérifier le statut du gateway
+    cmds:
+      - docker compose ps
+      - 'echo ""'
+      - '{{.EXEC}} health --token "$OPENCLAW_GATEWAY_TOKEN" 2>/dev/null || echo "Gateway non joignable"'
+
+  # --- Snapshot système ---
+  commit:
+    desc: Sauvegarder l'état système du conteneur dans l'image (apt install, /opt, etc.)
+    cmds:
+      - 'echo "Sauvegarde de l état système du conteneur..."'
+      - 'docker commit {{.CONTAINER_NAME}} ${OPENCLAW_IMAGE:-openclaw:local}'
+      - 'echo ""'
+      - 'echo "Image mise à jour. Les modifs système survivront même à un task recreate."'
+
+  # --- Backup & Restore (S3) ---
+  backup:
+    desc: Créer un backup et le pousser sur S3
+    cmds:
+      - bash scripts/backup-s3.sh
+
+  backup:local:
+    desc: Créer un backup local uniquement (sans S3)
+    cmds:
+      - bash scripts/backup.sh {{.CLI_ARGS}}
+
+  backup:list:
+    desc: Lister les backups disponibles sur S3
+    cmds:
+      - 'bash -c "source scripts/s3-helper.sh && set -a && source .env && set +a && check_s3_config && list_s3_backups"'
+
+  backup:prune:
+    desc: "Nettoyer les anciens backups S3 (garde les 3 plus recents)"
+    cmds:
+      - bash scripts/backup-prune.sh {{.CLI_ARGS}}
+
+  backup:cron:
+    desc: "Planifier un backup automatique (3h30, 3 backups max)"
+    cmds:
+      - bash scripts/backup-cron.sh
+
+  backup:cron:remove:
+    desc: Supprimer le cron de backup automatique
+    cmds:
+      - 'crontab -l 2>/dev/null | grep -v "# openclaw-backup" | crontab - || true'
+      - echo "Cron de backup supprimé."
+
+  restore:
+    desc: Restaurer depuis S3 (liste interactive)
+    cmds:
+      - bash scripts/restore-s3.sh
+
+  restore:local:
+    desc: "Restaurer depuis un fichier local"
+    cmds:
+      - bash scripts/restore.sh {{.CLI_ARGS}}
+
+  # --- Mise à jour ---
+  update:
+    desc: Mettre à jour OpenClaw (commit + backup auto, pull, rebuild, restart)
+    cmds:
+      - bash scripts/update.sh
+
+  build:
+    desc: Reconstruire l'image Docker sans cache
+    cmds:
+      - docker compose build --no-cache openclaw-gateway
+
+  build:apt:
+    desc: "Ajouter des paquets apt permanents"
+    cmds:
+      - 'echo "Ajout des paquets apt dans l image..."'
+      - 'OPENCLAW_DOCKER_APT_PACKAGES="{{.CLI_ARGS}}" docker compose build --no-cache openclaw-gateway'
+      - 'echo ""'
+      - 'echo "Image reconstruite. Applique avec task recreate"'
+      - 'echo ""'
+      - 'echo "Pour rendre permanent, ajoute dans .env :"'
+      - 'echo "  OPENCLAW_DOCKER_APT_PACKAGES={{.CLI_ARGS}}"'
+
+  # --- Utilitaires ---
+  shell:
+    desc: Ouvrir un shell dans le conteneur gateway
+    cmds:
+      - docker compose exec openclaw-gateway /bin/bash
+
+  cli:
+    desc: "Lancer une commande CLI OpenClaw"
+    cmds:
+      - '{{.EXEC}} {{.CLI_ARGS}}'
+
+  dashboard:
+    desc: Afficher l'URL du dashboard avec le bon token
+    cmds:
+      - '{{.EXEC}} dashboard --no-open'
+
+  devices:
+    desc: Lister les devices (paired et en attente)
+    cmds:
+      - '{{.EXEC}} devices list'
+      - 'echo ""'
+      - 'echo "Pour approuver un device en attente :"'
+      - 'echo "  task devices:approve -- <requestId>"'
+
+  devices:approve:
+    desc: "Approuver un device en attente de pairing"
+    cmds:
+      - '{{.EXEC}} devices approve {{.CLI_ARGS}}'
+
+  # --- Auth / Providers ---
+  auth:codex:
+    desc: Connecter OpenAI Codex via OAuth (pas besoin de clé API)
+    cmds:
+      - 'echo "Connexion OAuth à OpenAI Codex..."'
+      - 'echo "Un lien va s afficher. Ouvre-le dans ton navigateur."'
+      - 'echo "Après l auth, copie l URL de redirection complète et colle-la ici."'
+      - 'echo ""'
+      - docker compose run --rm -p 1455:1455 openclaw-cli models auth login --provider openai-codex
+      - 'echo ""'
+      - 'echo "Codex connecté ! Redémarre le gateway avec task restart"'
+
+  # --- Channels ---
+  channel:whatsapp:
+    desc: Connecter WhatsApp (QR code)
+    cmds:
+      - '{{.EXEC}} channels login'
+
+  channel:telegram:
+    desc: "Ajouter un bot Telegram"
+    cmds:
+      - '{{.EXEC}} channels add --channel telegram --token "{{.CLI_ARGS}}"'
+
+  channel:discord:
+    desc: "Ajouter un bot Discord"
+    cmds:
+      - '{{.EXEC}} channels add --channel discord --token "{{.CLI_ARGS}}"'
+
+  # --- Nettoyage ---
+  clean:
+    desc: Supprimer les conteneurs et l'image Docker (les données config/workspace persistent)
+    prompt: "Cela va supprimer les conteneurs et l'image Docker (les modifs système seront perdues). Continuer ?"
+    cmds:
+      - docker compose down --rmi local
+
+  clean:all:
+    desc: Tout supprimer (conteneurs, images, volumes, données) - IRRÉVERSIBLE
+    cmds:
+      - |
+        echo ""
+        echo "⚠ ATTENTION - Cela va TOUT supprimer :"
+        echo "  - Conteneurs et images Docker"
+        echo "  - Volume openclaw_home"
+        echo "  - Config, tokens, sessions ({{.DATA_DIR}})"
+        echo "  - Workspace ({{.WORKSPACE_DIR}})"
+        echo ""
+        echo "Tape SUPPRIMER pour confirmer :"
+        read -r CONFIRM
+        if [ "$CONFIRM" != "SUPPRIMER" ]; then
+          echo "Annulé."
+          exit 1
+        fi
+      - docker compose down --rmi local -v
+      - rm -rf {{.DATA_DIR}} {{.WORKSPACE_DIR}}
+
+  # --- SSH Tunnel (pour accès depuis ton PC) ---
+  tunnel:
+    desc: "Afficher la commande SSH tunnel pour accès distant"
+    cmds:
+      - 'echo "Exécute cette commande depuis ton PC local :"'
+      - 'echo ""'
+      - 'echo "  ssh -N -L {{.GATEWAY_PORT}}:127.0.0.1:{{.GATEWAY_PORT}} user@TON_VPS_IP"'
+      - 'echo ""'
+      - 'echo "Puis ouvre http://127.0.0.1:{{.GATEWAY_PORT}}/ dans ton navigateur"'

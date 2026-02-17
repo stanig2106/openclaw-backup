@@ -1,0 +1,7 @@
+openclaw/
+data/
+backups/
+logs/
+.env
+.git
+.claude

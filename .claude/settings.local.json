@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.openclaw.ai)",
+      "Bash(gh repo view:*)",
+      "Bash(gh api:*)",
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(for dir in apps packages extensions skills src ui)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(done)",
+      "Bash(chmod:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "WebSearch",
+      "Bash(docker compose exec:*)",
+      "Bash(task restart:*)",
+      "Bash(ls:*)",
+      "Bash(tar:*)"
+    ]
+  }
+}
