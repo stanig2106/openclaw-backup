@@ -24,7 +24,7 @@ s3() {
 }
 
 s3_path() {
-    echo "s3://${S3_BUCKET}/${S3_PREFIX:-openclaw-backups}/$1"
+    echo "s3://${S3_BUCKET}/${S3_PREFIX:-openclaw-backups}/${INSTANCE_NAME:-main}/$1"
 }
 
 list_s3_backups() {

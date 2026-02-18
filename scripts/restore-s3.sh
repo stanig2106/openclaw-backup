@@ -57,7 +57,7 @@ S3_SRC=$(s3_path "$SELECTED_FILE")
 info "Backup sélectionné: $SELECTED_FILE"
 
 # Télécharger
-TMP_FILE="/tmp/$SELECTED_FILE"
+TMP_FILE=$(mktemp "/tmp/openclaw-${INSTANCE_NAME}-restore-XXXXXX.tar.gz")
 trap "rm -f $TMP_FILE 2>/dev/null" EXIT
 
 info "Téléchargement depuis S3..."

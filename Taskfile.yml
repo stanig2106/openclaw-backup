@@ -3,12 +3,18 @@ version: '3'
 dotenv: ['.env']
 
 vars:
-  DATA_DIR: '{{.OPENCLAW_DATA_DIR | default "./data/config"}}'
-  WORKSPACE_DIR: '{{.OPENCLAW_WORKSPACE_DIR | default "./data/workspace"}}'
+  INSTANCE_NAME: '{{.INSTANCE_NAME | default "main"}}'
+  DATA_DIR: '{{.OPENCLAW_DATA_DIR | default (printf "./data/%s/config" .INSTANCE_NAME)}}'
+  WORKSPACE_DIR: '{{.OPENCLAW_WORKSPACE_DIR | default (printf "./data/%s/workspace" .INSTANCE_NAME)}}'
+  BACKUP_DIR: './backups/{{.INSTANCE_NAME}}'
+  LOG_DIR: './logs/{{.INSTANCE_NAME}}'
   GATEWAY_PORT: '{{.OPENCLAW_GATEWAY_PORT | default "18789"}}'
-  CONTAINER_NAME: openclaw-docker-openclaw-gateway-1
+  CONTAINER_NAME: 'openclaw-{{.INSTANCE_NAME}}-gateway'
   # exec dans le gateway (pour les commandes qui parlent au gateway)
-  EXEC: docker compose exec openclaw-gateway node dist/index.js
+  EXEC: docker compose exec gateway node dist/index.js
+
+env:
+  COMPOSE_PROJECT_NAME: 'openclaw-{{.INSTANCE_NAME}}'
 
 tasks:
   # --- Installation ---
@@ -27,7 +33,7 @@ tasks:
         if docker ps -a --format '{{`{{.Names}}`}}' | grep -q "^{{.CONTAINER_NAME}}$"; then
           docker start {{.CONTAINER_NAME}}
         else
-          docker compose up -d openclaw-gateway
+          docker compose up -d gateway
         fi
       - 'echo ""'
       - 'echo "Gateway démarré sur http://127.0.0.1:{{.GATEWAY_PORT}}/"'
@@ -35,24 +41,24 @@ tasks:
   stop:
     desc: Arrêter le gateway (préserve les modifs système)
     cmds:
-      - docker compose stop openclaw-gateway
+      - docker compose stop gateway
 
   restart:
     desc: Redémarrer le gateway (préserve les modifs système)
     cmds:
-      - docker compose restart openclaw-gateway
+      - docker compose restart gateway
 
   recreate:
     desc: Recréer le conteneur depuis l'image (perd les modifs système non commitées)
     prompt: "Les modifs système non commitées seront perdues. Fais 'task commit' d'abord si besoin. Continuer ?"
     cmds:
-      - docker compose up -d --force-recreate openclaw-gateway
+      - docker compose up -d --force-recreate gateway
 
   # --- Monitoring ---
   logs:
     desc: Afficher les logs en temps réel
     cmds:
-      - docker compose logs -f openclaw-gateway
+      - docker compose logs -f gateway
 
   status:
     desc: Vérifier le statut du gateway
@@ -99,7 +105,7 @@ tasks:
   backup:cron:remove:
     desc: Supprimer le cron de backup automatique
     cmds:
-      - 'crontab -l 2>/dev/null | grep -v "# openclaw-backup" | crontab - || true'
+      - 'crontab -l 2>/dev/null | grep -v "# openclaw-backup-{{.INSTANCE_NAME}}" | crontab - || true'
       - echo "Cron de backup supprimé."
 
   restore:
@@ -121,13 +127,13 @@ tasks:
   build:
     desc: Reconstruire l'image Docker sans cache
     cmds:
-      - docker compose build --no-cache openclaw-gateway
+      - docker compose build --no-cache gateway
 
   build:apt:
     desc: "Ajouter des paquets apt permanents"
     cmds:
       - 'echo "Ajout des paquets apt dans l image..."'
-      - 'OPENCLAW_DOCKER_APT_PACKAGES="{{.CLI_ARGS}}" docker compose build --no-cache openclaw-gateway'
+      - 'OPENCLAW_DOCKER_APT_PACKAGES="{{.CLI_ARGS}}" docker compose build --no-cache gateway'
       - 'echo ""'
       - 'echo "Image reconstruite. Applique avec task recreate"'
       - 'echo ""'
@@ -138,7 +144,7 @@ tasks:
   shell:
     desc: Ouvrir un shell dans le conteneur gateway
     cmds:
-      - docker compose exec openclaw-gateway /bin/bash
+      - docker compose exec gateway /bin/bash
 
   cli:
     desc: "Lancer une commande CLI OpenClaw"
@@ -171,7 +177,7 @@ tasks:
       - 'echo "Un lien va s afficher. Ouvre-le dans ton navigateur."'
       - 'echo "Après l auth, copie l URL de redirection complète et colle-la ici."'
       - 'echo ""'
-      - docker compose run --rm -p 1455:1455 openclaw-cli models auth login --provider openai-codex
+      - docker compose run --rm -p 1455:1455 cli models auth login --provider openai-codex
       - 'echo ""'
       - 'echo "Codex connecté ! Redémarre le gateway avec task restart"'
 
@@ -203,9 +209,9 @@ tasks:
     cmds:
       - |
         echo ""
-        echo "⚠ ATTENTION - Cela va TOUT supprimer :"
+        echo "ATTENTION - Cela va TOUT supprimer :"
         echo "  - Conteneurs et images Docker"
-        echo "  - Volume openclaw_home"
+        echo "  - Volume openclaw_{{.INSTANCE_NAME}}_home"
         echo "  - Config, tokens, sessions ({{.DATA_DIR}})"
         echo "  - Workspace ({{.WORKSPACE_DIR}})"
         echo ""
@@ -217,6 +223,25 @@ tasks:
         fi
       - docker compose down --rmi local -v
       - rm -rf {{.DATA_DIR}} {{.WORKSPACE_DIR}}
+
+  # --- Migration ---
+  migrate:
+    desc: Migrer une installation existante vers le layout multi-instance
+    cmds:
+      - bash scripts/migrate-to-multi-instance.sh
+
+  # --- Instances ---
+  instances:list:
+    desc: Lister les instances OpenClaw actives
+    cmds:
+      - |
+        echo "Instances OpenClaw actives :"
+        echo ""
+        docker ps --format '{{`{{.Names}}`}}' 2>/dev/null | grep '^openclaw-.*-gateway$' | while read name; do
+          instance=$(echo "$name" | sed 's/^openclaw-//;s/-gateway$//')
+          port=$(docker port "$name" 18789 2>/dev/null | head -1 || echo "?")
+          echo "  - $instance ($name) -> $port"
+        done || echo "  Aucune instance active."
 
   # --- SSH Tunnel (pour accès depuis ton PC) ---
   tunnel:

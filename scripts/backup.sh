@@ -2,9 +2,9 @@
 source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 load_env
 
-BACKUP_DIR="${1:-./backups}"
+BACKUP_DIR="${1:-./backups/${INSTANCE_NAME}}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_NAME="openclaw-backup-${TIMESTAMP}"
+BACKUP_NAME="openclaw-${INSTANCE_NAME}-backup-${TIMESTAMP}"
 BACKUP_FILE="${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
 
 [ -d "$DATA_DIR" ] || error "Répertoire de données introuvable: $DATA_DIR"

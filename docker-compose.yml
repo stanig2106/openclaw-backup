@@ -1,6 +1,7 @@
 services:
-  openclaw-gateway:
+  gateway:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: openclaw-${INSTANCE_NAME:-main}-gateway
     build:
       context: .
       dockerfile: Dockerfile
@@ -18,9 +19,9 @@ services:
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
     volumes:
-      - openclaw_home:/home/node
-      - ${OPENCLAW_DATA_DIR:-./data/config}:/home/node/.openclaw
-      - ${OPENCLAW_WORKSPACE_DIR:-./data/workspace}:/home/node/.openclaw/workspace
+      - instance_home:/home/node
+      - ${OPENCLAW_DATA_DIR:-./data/${INSTANCE_NAME:-main}/config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-./data/${INSTANCE_NAME:-main}/workspace}:/home/node/.openclaw/workspace
     ports:
       - "${OPENCLAW_GATEWAY_HOST:-127.0.0.1}:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
     command:
@@ -41,8 +42,9 @@ services:
       retries: 3
       start_period: 30s
 
-  openclaw-cli:
+  cli:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    container_name: openclaw-${INSTANCE_NAME:-main}-cli
     env_file:
       - .env
     environment:
@@ -50,20 +52,20 @@ services:
       - NODE_ENV=production
       - TERM=xterm-256color
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-      - OPENCLAW_GATEWAY_URL=ws://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_URL=ws://gateway:18789
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
     volumes:
-      - openclaw_home:/home/node
-      - ${OPENCLAW_DATA_DIR:-./data/config}:/home/node/.openclaw
-      - ${OPENCLAW_WORKSPACE_DIR:-./data/workspace}:/home/node/.openclaw/workspace
+      - instance_home:/home/node
+      - ${OPENCLAW_DATA_DIR:-./data/${INSTANCE_NAME:-main}/config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-./data/${INSTANCE_NAME:-main}/workspace}:/home/node/.openclaw/workspace
     stdin_open: true
     tty: true
     entrypoint: ["node", "dist/index.js"]
     depends_on:
-      - openclaw-gateway
+      - gateway
     profiles:
       - cli
 
 volumes:
-  openclaw_home:
-    name: openclaw_home
+  instance_home:
+    name: openclaw_${INSTANCE_NAME:-main}_home

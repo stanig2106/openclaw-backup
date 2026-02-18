@@ -16,7 +16,15 @@
       "Bash(docker compose exec:*)",
       "Bash(task restart:*)",
       "Bash(ls:*)",
-      "Bash(tar:*)"
+      "Bash(tar:*)",
+      "Bash(git remote add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker volume ls:*)",
+      "Bash(docker volume inspect:*)",
+      "Bash(docker network:*)"
     ]
   }
 }

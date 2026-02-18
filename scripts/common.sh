@@ -23,14 +23,35 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# --- Variables communes ---
-CONTAINER_NAME="openclaw-docker-openclaw-gateway-1"
+# --- Validation instance ---
+validate_instance_name() {
+    local name="$1"
+    if [ ${#name} -gt 32 ]; then
+        error "Le nom d'instance ne peut pas dépasser 32 caractères: '$name'"
+    fi
+    if ! [[ "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        error "Nom d'instance invalide: '$name' (minuscules, chiffres, tirets, ne commence/finit pas par un tiret)"
+    fi
+}
 
+# --- Variables communes ---
 load_env() {
     [ -f "$PROJECT_DIR/.env" ] || error "Fichier .env introuvable"
     set -a; source "$PROJECT_DIR/.env"; set +a
-    DATA_DIR="${OPENCLAW_DATA_DIR:-./data/config}"
-    WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-./data/workspace}"
+
+    # Instance
+    INSTANCE_NAME="${INSTANCE_NAME:-main}"
+    validate_instance_name "$INSTANCE_NAME"
+    export COMPOSE_PROJECT_NAME="openclaw-${INSTANCE_NAME}"
+
+    # Conteneur
+    CONTAINER_NAME="openclaw-${INSTANCE_NAME}-gateway"
+
+    # Chemins (defaults dynamiques basés sur l'instance)
+    DATA_DIR="${OPENCLAW_DATA_DIR:-./data/${INSTANCE_NAME}/config}"
+    WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-./data/${INSTANCE_NAME}/workspace}"
+    BACKUP_DIR="./backups/${INSTANCE_NAME}"
+    LOG_DIR="./logs/${INSTANCE_NAME}"
     IMAGE_NAME="${OPENCLAW_IMAGE:-openclaw:local}"
 }
 
@@ -63,7 +84,7 @@ gateway_start() {
 
 gateway_up() {
     info "Démarrage du gateway..."
-    docker compose up -d openclaw-gateway
+    docker compose up -d gateway
     ok "Gateway démarré !"
 }
 
@@ -71,7 +92,7 @@ gateway_up() {
 create_backup() {
     local output_file="$1"
     local temp_dir
-    temp_dir=$(mktemp -d)
+    temp_dir=$(mktemp -d "/tmp/openclaw-${INSTANCE_NAME}-backup.XXXXXX")
 
     mkdir -p "$temp_dir/$BACKUP_NAME"
 
@@ -101,7 +122,7 @@ restore_from() {
     tar -xzf "$archive" -C "$temp_dir"
 
     local extracted
-    extracted=$(find "$temp_dir" -maxdepth 1 -type d -name "openclaw-backup-*" | head -1)
+    extracted=$(find "$temp_dir" -maxdepth 1 -type d -name "openclaw-*-backup-*" -o -name "openclaw-backup-*" | head -1)
     [ -n "$extracted" ] || error "Format de backup invalide"
 
     echo ""
@@ -112,8 +133,8 @@ restore_from() {
 
     # Sauvegarde de sécurité
     if [ -d "$DATA_DIR" ] && [ "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
-        local safety="./backups/pre-restore-$(date +%Y%m%d_%H%M%S).tar.gz"
-        mkdir -p ./backups
+        local safety="./backups/${INSTANCE_NAME}/pre-restore-$(date +%Y%m%d_%H%M%S).tar.gz"
+        mkdir -p "./backups/${INSTANCE_NAME}"
         info "Sauvegarde de sécurité dans $safety..."
         tar -czf "$safety" "$DATA_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
     fi

@@ -17,6 +17,16 @@ ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
+validate_instance_name() {
+    local name="$1"
+    if [ ${#name} -gt 32 ]; then
+        error "Le nom d'instance ne peut pas dépasser 32 caractères: '$name'"
+    fi
+    if ! [[ "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+        error "Nom d'instance invalide: '$name' (minuscules, chiffres, tirets, ne commence/finit pas par un tiret)"
+    fi
+}
+
 # --- Vérifications ---
 info "Vérification des prérequis..."
 
@@ -37,6 +47,42 @@ else
     cd "$PROJECT_DIR"
     ok "OpenClaw à jour"
 fi
+
+# --- Nom d'instance ---
+echo ""
+echo -e "${BLUE}Nom de cette instance OpenClaw${NC}"
+echo "  Permet de faire tourner plusieurs instances sur la meme machine."
+echo "  Utilise des minuscules, chiffres et tirets (ex: main, prod, dev)"
+echo ""
+read -p "Nom de l'instance [main] : " INSTANCE_INPUT
+INSTANCE_NAME="${INSTANCE_INPUT:-main}"
+validate_instance_name "$INSTANCE_NAME"
+ok "Instance: $INSTANCE_NAME"
+
+# --- Port (demander si non-main) ---
+DEFAULT_PORT=18789
+if [ "$INSTANCE_NAME" != "main" ]; then
+    echo ""
+    echo -e "${BLUE}Port du gateway${NC}"
+    echo "  Chaque instance doit utiliser un port different."
+    echo ""
+    read -p "Port du gateway [$((DEFAULT_PORT + 1))] : " PORT_INPUT
+    GATEWAY_PORT="${PORT_INPUT:-$((DEFAULT_PORT + 1))}"
+
+    # Vérifier si le port est déjà utilisé
+    if command -v lsof >/dev/null 2>&1; then
+        if lsof -i :"$GATEWAY_PORT" >/dev/null 2>&1; then
+            warn "Le port $GATEWAY_PORT semble deja utilise !"
+            read -p "Continuer quand meme ? (y/N) " -n 1 -r
+            echo ""
+            [[ $REPLY =~ ^[Yy]$ ]] || error "Annulé. Choisis un autre port."
+        fi
+    fi
+else
+    GATEWAY_PORT=$DEFAULT_PORT
+fi
+
+export COMPOSE_PROJECT_NAME="openclaw-${INSTANCE_NAME}"
 
 # --- Créer .env si nécessaire ---
 if [ ! -f "$PROJECT_DIR/.env" ]; then
@@ -60,14 +106,23 @@ else
     ok "Fichier .env déjà présent"
 fi
 
+# Écrire INSTANCE_NAME et port dans le .env
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/^INSTANCE_NAME=.*/INSTANCE_NAME=${INSTANCE_NAME}/" "$PROJECT_DIR/.env"
+    sed -i '' "s/^OPENCLAW_GATEWAY_PORT=.*/OPENCLAW_GATEWAY_PORT=${GATEWAY_PORT}/" "$PROJECT_DIR/.env"
+else
+    sed -i "s/^INSTANCE_NAME=.*/INSTANCE_NAME=${INSTANCE_NAME}/" "$PROJECT_DIR/.env"
+    sed -i "s/^OPENCLAW_GATEWAY_PORT=.*/OPENCLAW_GATEWAY_PORT=${GATEWAY_PORT}/" "$PROJECT_DIR/.env"
+fi
+
 # Charger le .env
 set -a
 source "$PROJECT_DIR/.env"
 set +a
 
 # --- Créer les répertoires de données ---
-DATA_DIR="${OPENCLAW_DATA_DIR:-./data/config}"
-WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-./data/workspace}"
+DATA_DIR="${OPENCLAW_DATA_DIR:-./data/${INSTANCE_NAME}/config}"
+WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-./data/${INSTANCE_NAME}/workspace}"
 
 info "Création des répertoires de persistance..."
 mkdir -p "$DATA_DIR" "$WORKSPACE_DIR"
@@ -92,26 +147,26 @@ docker build -t openclaw:base \
 ok "Image de base construite"
 
 info "Étape 2/2 : Ajout des outils (brew, go, bun, uv, ffmpeg...)..."
-docker compose build openclaw-gateway
+docker compose build gateway
 ok "Image finale construite avec tous les outils"
 
 # --- Onboarding interactif ---
 info "Lancement de l'onboarding OpenClaw..."
 echo -e "${YELLOW}Suis les instructions pour configurer ton fournisseur de modèle (Anthropic, OpenAI, etc.)${NC}"
 echo ""
-docker compose run --rm openclaw-cli onboard --no-install-daemon
+docker compose run --rm cli onboard --no-install-daemon
 
 ok "Onboarding terminé"
 
 # --- Démarrage ---
 info "Démarrage du gateway OpenClaw..."
-docker compose up -d openclaw-gateway
+docker compose up -d gateway
 
 # Attendre que le gateway soit prêt
 info "Attente du démarrage du gateway..."
 sleep 5
 
-EXEC="docker compose exec openclaw-gateway node dist/index.js"
+EXEC="docker compose exec gateway node dist/index.js"
 
 # Générer l'URL du dashboard avec le bon token
 DASHBOARD_URL=$($EXEC dashboard --no-open 2>&1 | grep -oE 'http://[^ ]+' | head -1 || true)
@@ -120,13 +175,13 @@ ok "Gateway démarré !"
 
 echo ""
 echo "============================================================"
-echo -e "${GREEN}OpenClaw est prêt !${NC}"
+echo -e "${GREEN}OpenClaw est prêt ! (instance: ${INSTANCE_NAME})${NC}"
 echo "============================================================"
 echo ""
 if [ -n "$DASHBOARD_URL" ]; then
     echo -e "  Dashboard:  ${YELLOW}$DASHBOARD_URL${NC}"
 else
-    echo "  Dashboard:  http://127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}/"
+    echo "  Dashboard:  http://127.0.0.1:${GATEWAY_PORT}/"
     echo "  Token:      $(grep OPENCLAW_GATEWAY_TOKEN .env | cut -d= -f2)"
 fi
 echo ""

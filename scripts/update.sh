@@ -31,13 +31,13 @@ docker build -t openclaw:base --no-cache \
 ok "Image de base reconstruite"
 
 info "Reconstruction de l'image finale..."
-docker compose build --no-cache openclaw-gateway
+docker compose build --no-cache gateway
 ok "Image finale reconstruite"
 
 # Redémarrage
 info "Redémarrage du gateway..."
-docker compose down openclaw-gateway
-docker compose up -d openclaw-gateway
+docker compose down gateway
+docker compose up -d gateway
 ok "Gateway redémarré avec la nouvelle version"
 
 echo ""

@@ -5,8 +5,8 @@ load_env
 check_s3_config
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_NAME="openclaw-backup-${TIMESTAMP}"
-TMP_FILE="/tmp/${BACKUP_NAME}.tar.gz"
+BACKUP_NAME="openclaw-${INSTANCE_NAME}-backup-${TIMESTAMP}"
+TMP_FILE=$(mktemp "/tmp/openclaw-${INSTANCE_NAME}-backup-XXXXXX.tar.gz")
 trap "rm -f $TMP_FILE 2>/dev/null" EXIT
 
 [ -d "$DATA_DIR" ] || error "Répertoire de données introuvable: $DATA_DIR"
