@@ -36,9 +36,11 @@ task restore
 | `task start` | Demarrer le gateway |
 | `task stop` | Arreter le gateway |
 | `task restart` | Redemarrer le gateway |
+| `task restart:hot` | Hot reload du gateway (via SIGUSR1, sans recreer le conteneur) |
 | `task logs` | Voir les logs en temps reel |
 | `task status` | Verifier le statut |
 | `task shell` | Ouvrir un shell dans le conteneur |
+| `task cli -- <commande>` | Lancer une commande CLI OpenClaw |
 | `task dashboard` | Afficher l'URL du dashboard |
 
 ### Backup & Restore
@@ -62,6 +64,7 @@ task restore
 | `task recreate` | Recreer le conteneur depuis l'image |
 | `task update` | Mettre a jour OpenClaw (backup auto, pull, rebuild) |
 | `task build` | Reconstruire l'image Docker |
+| `task build:apt -- <paquets>` | Ajouter des paquets apt permanents a l'image |
 
 ### Channels
 
@@ -71,13 +74,30 @@ task restore
 | `task channel:telegram -- <token>` | Ajouter un bot Telegram |
 | `task channel:discord -- <token>` | Ajouter un bot Discord |
 
+### Approbation
+
+| Commande | Description |
+|----------|-------------|
+| `task approval:on` | Activer l'auto-approbation des outils eleves |
+| `task approval:off` | Desactiver l'auto-approbation (demande confirmation) |
+| `task approval:status` | Verifier l'etat de l'auto-approbation |
+
+### Devices & Pairing
+
+| Commande | Description |
+|----------|-------------|
+| `task devices` | Lister les devices |
+| `task devices:approve -- <id>` | Approuver un device |
+| `task approve:telegram` | Approuver le pairing Telegram |
+
 ### Autres
 
 | Commande | Description |
 |----------|-------------|
 | `task auth:codex` | Connecter OpenAI Codex via OAuth |
-| `task devices` | Lister les devices |
-| `task devices:approve -- <id>` | Approuver un device |
+| `task instances:list` | Lister les instances OpenClaw actives |
+| `task tunnel` | Afficher la commande SSH tunnel pour acces distant |
+| `task migrate` | Migrer vers le layout multi-instance |
 | `task clean` | Supprimer conteneurs et image |
 | `task clean:all` | Tout supprimer (IRREVERSIBLE) |
 
@@ -108,6 +128,7 @@ Puis ouvre `http://127.0.0.1:18789/` sur ton PC.
 │   ├── s3-helper.sh      # Fonctions S3
 │   ├── setup.sh          # Installation complete
 │   ├── update.sh         # Mise a jour
+│   ├── approval.sh       # Gestion auto-approbation outils eleves
 │   ├── backup.sh         # Backup local
 │   ├── backup-s3.sh      # Backup S3
 │   ├── backup-cron.sh    # Cron backup
