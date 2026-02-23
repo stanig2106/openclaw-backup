@@ -38,3 +38,10 @@ ENV PATH="/home/node/.bun/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.li
 ENV GOPATH="/home/node/go"
 
 WORKDIR /app
+
+# Exposer la CLI "openclaw" (wrapper vers node dist/index.js)
+USER root
+RUN printf '#!/bin/sh\nexec node /app/dist/index.js "$@"\n' > /usr/local/bin/openclaw \
+ && chmod +x /usr/local/bin/openclaw
+USER node
+

@@ -158,6 +158,18 @@ docker compose run --rm cli onboard --no-install-daemon
 
 ok "Onboarding terminé"
 
+# --- Auto-approbation par défaut ---
+info "Activation de l'auto-approbation des outils élevés..."
+python3 -c "
+import json
+p='$DATA_DIR/openclaw.json'
+obj=json.load(open(p))
+obj.setdefault('agents',{}).setdefault('defaults',{})['elevatedDefault']='full'
+obj.setdefault('tools',{}).setdefault('elevated',{})['enabled']=True
+with open(p,'w') as f: json.dump(obj,f,indent=2)
+"
+ok "Auto-approbation activée (tu peux la désactiver avec: task approval:off)"
+
 # --- Démarrage ---
 info "Démarrage du gateway OpenClaw..."
 docker compose up -d gateway

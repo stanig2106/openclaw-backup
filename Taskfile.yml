@@ -48,6 +48,12 @@ tasks:
     cmds:
       - docker compose restart gateway
 
+  restart:hot:
+    desc: Redémarrer le process gateway sans recréer le conteneur (recharge la config)
+    cmds:
+      - docker kill --signal=SIGUSR1 {{.CONTAINER_NAME}}
+      - 'echo "Gateway redémarré (hot reload via SIGUSR1)"'
+
   recreate:
     desc: Recréer le conteneur depuis l'image (perd les modifs système non commitées)
     prompt: "Les modifs système non commitées seront perdues. Fais 'task commit' d'abord si besoin. Continuer ?"
@@ -168,6 +174,27 @@ tasks:
     desc: "Approuver un device en attente de pairing"
     cmds:
       - '{{.EXEC}} devices approve {{.CLI_ARGS}}'
+
+  approve:telegram:
+    desc: "Approuver le pairing Telegram"
+    cmds:
+      - '{{.EXEC}} pairing approve telegram {{.CLI_ARGS}}'
+
+  # --- Approbation ---
+  approval:on:
+    desc: "Activer l'auto-approbation des outils élevés"
+    cmds:
+      - bash scripts/approval.sh on
+
+  approval:off:
+    desc: "Désactiver l'auto-approbation (demande confirmation)"
+    cmds:
+      - bash scripts/approval.sh off
+
+  approval:status:
+    desc: "Vérifier l'état de l'auto-approbation"
+    cmds:
+      - bash scripts/approval.sh status
 
   # --- Auth / Providers ---
   auth:codex:
